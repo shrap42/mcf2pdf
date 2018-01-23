@@ -92,7 +92,7 @@ public class McfResourceScanner {
 				else if(nm.matches("normalbinding.*\\.png")) {
 					foundBinding = f;
 				}
-				else if (nm.matches(".+\\.xml") && path.contains("/decorations/")) {
+				else if (nm.matches(".+\\.xml") && (path.contains("/decorations/") || (path.contains("\\decorations\\")))) {
 					String id = f.getName().substring(0, nm.lastIndexOf("."));
 					List<Decoration> spec = loadDecoration(f);
 					if (spec.size() == 1) {

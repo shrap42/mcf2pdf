@@ -108,7 +108,7 @@ public class PageBackground implements PageDrawable {
 			PageRenderContext context) throws IOException {
 		for (McfBackground bg : bgs) {
 			String tn = bg.getTemplateName();
-			if (tn == null || !tn.matches("[a-zA-Z0-9_]+,normal(,.*)?"))
+			if (tn == null || !tn.matches("[a-zA-Z0-9_]+(,hue=[0-9]+)?(,fading=[0-9]+)?,normal(,.*)?"))
 				continue;
 
 			tn = tn.substring(0, tn.indexOf(","));
