@@ -169,8 +169,6 @@ public class Mcf2FoConverter {
 		if (albumType == null)
 			throw new IOException("No album type definition found for used print product '" + book.getProductName() + "'");
 
-		// prepare page render context
-		context = new PageRenderContext(dpi, resources, albumType);
 
 		// create XSL-FO document
 		XslFoDocumentBuilder docBuilder = new XslFoDocumentBuilder();
@@ -201,7 +199,15 @@ public class Mcf2FoConverter {
 				else
 					rightCover = p;
 			}
+			for (McfBackground bg : p.getBackgrounds()) {
+				if (bg.getTemplateName().matches("([a-zA-Z0-9_]+),hue=([0-9]+),fading=([0-9]+),normal(,.*)?")) {
+					resources.addMulticolorBackground(bg.getTemplateName(), tempImageDir);
+				}
+			}
 		}
+
+		// prepare page render context
+		context = new PageRenderContext(dpi, resources, albumType);
 
 		if (leftCover != null) {
 			log.info("Rendering cover...");

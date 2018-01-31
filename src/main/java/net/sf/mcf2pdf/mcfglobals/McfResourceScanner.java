@@ -3,8 +3,17 @@
  *******************************************************************************/
 package net.sf.mcf2pdf.mcfglobals;
 
+import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontFormatException;
+import java.awt.Graphics2D;
+import java.awt.Image;
+import java.awt.Toolkit;
+import java.awt.image.BufferedImage;
+import java.awt.image.FilteredImageSource;
+import java.awt.image.ImageFilter;
+import java.awt.image.ImageProducer;
+import java.awt.image.RGBImageFilter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -14,6 +23,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import javax.imageio.ImageIO;
 
 import org.apache.commons.digester3.Digester;
 import org.apache.commons.io.IOUtils;
@@ -24,12 +37,13 @@ import net.sf.mcf2pdf.mcfconfig.Decoration;
 import net.sf.mcf2pdf.mcfconfig.Fading;
 import net.sf.mcf2pdf.mcfconfig.Template;
 import net.sf.mcf2pdf.mcfelements.impl.DigesterConfiguratorImpl;
+import net.sf.mcf2pdf.mcfelements.util.ImageUtil;
 
 /**
  * "Dirty little helper" which scans installation directory and temporary
- * directory of fotobook software for background images, cliparts, fonts,
- * and masks (fadings). As there is no (known) usable TOC for these, we just
- * take what we find.
+ * directory of fotobook software for background images, cliparts, fonts, and
+ * masks (fadings). As there is no (known) usable TOC for these, we just take
+ * what we find.
  */
 public class McfResourceScanner {
 
@@ -48,6 +62,9 @@ public class McfResourceScanner {
 	private Map<String, Fading> foundDecorations = new HashMap<String, Fading>();
 
 	private File foundBinding;
+
+	private int hue;
+	private int fading;
 
 	public McfResourceScanner(List<File> scanDirs) {
 		this.scanDirs.addAll(scanDirs);
@@ -72,27 +89,23 @@ public class McfResourceScanner {
 				if (nm.matches(".+\\.(jp(e?)g|webp|bmp)")) {
 					String id = nm.substring(0, nm.indexOf("."));
 					foundImages.put(id, f);
-				}
-				else if (nm.matches(".+\\.(clp|svg)")) {
+				} else if (nm.matches(".+\\.(clp|svg)")) {
 					String id = f.getName().substring(0, nm.lastIndexOf("."));
 					foundClips.put(id, f);
-				}
-				else if (nm.equals("1_color_backgrounds.xml")) {
+				} else if (nm.equals("1_color_backgrounds.xml")) {
 					log.debug("Processing 1-color backgrounds " + f.getAbsolutePath());
 					List<Template> colors = loadColorsMapping(f);
 					for (Template color : colors) {
 						File colorFile = new File(f.getParent() + '/' + color.getFilename());
 						foundColors.put(color.getName(), colorFile);
 					}
-				}
-				else if(nm.matches(".+\\.ttf")) {
+				} else if (nm.matches(".+\\.ttf")) {
 					Font font = loadFont(f);
 					foundFonts.put(font.getFamily(), font);
-				}
-				else if(nm.matches("normalbinding.*\\.png")) {
+				} else if (nm.matches("normalbinding.*\\.png")) {
 					foundBinding = f;
-				}
-				else if (nm.matches(".+\\.xml") && (path.contains("/decorations/") || (path.contains("\\decorations\\")))) {
+				} else if (nm.matches(".+\\.xml")
+						&& (path.contains("/decorations/") || (path.contains("\\decorations\\")))) {
 					String id = f.getName().substring(0, nm.lastIndexOf("."));
 					List<Decoration> spec = loadDecoration(f);
 					if (spec.size() == 1) {
@@ -111,8 +124,7 @@ public class McfResourceScanner {
 			return Font.createFont(Font.TRUETYPE_FONT, is);
 		} catch (FontFormatException e) {
 			throw new IOException(e);
-		}
-		finally {
+		} finally {
 			IOUtils.closeQuietly(is);
 		}
 	}
@@ -165,4 +177,56 @@ public class McfResourceScanner {
 		return foundDecorations.get(id);
 	}
 
+	public void addMulticolorBackground(String templateName, File tempDir) throws IOException  {
+		Pattern pattern = Pattern.compile("([a-zA-Z0-9_]+),hue=([0-9]+),fading=([0-9]+),normal(,.*)?");
+		Matcher matcher = pattern.matcher(templateName);
+		String id = "";
+		if (!matcher.find())
+			log.error("Error during parsing multicolor background. Template name: " + templateName);
+		if (matcher.groupCount() == 4) {
+			id = matcher.group(1);
+			if (matcher.group(2) != null) {
+				hue = Integer.parseInt(matcher.group(2));
+			}
+			if (matcher.group(3) != null) {
+				fading = Integer.parseInt(matcher.group(3));
+			}
+			log.debug("Multicolor background found. Parameters are: hue=" + hue + ", fading=" + fading);
+		}
+
+		File f = foundImages.get(id);
+		if (f != null) {
+			BufferedImage img = ImageUtil.readImage(f);
+			ImageFilter filter = new RGBImageFilter() {
+				@Override
+				public int filterRGB(int x, int y, int rgb) {
+					int alpha = (rgb & 0xff000000);
+					int red = (rgb & 0xff0000) >> 16;
+					int green = (rgb & 0x00ff00) >> 8;
+					int blue = (rgb & 0x0000ff);
+					float[] hsbvals = new float[3];
+					if (fading > 0)
+						Color.RGBtoHSB(red + (255 - red) / 4 * (fading + 1),
+								green + (255 - green) / 4 * (fading + 1), blue + (255 - blue) / 4 * (fading + 1),
+								hsbvals);
+					else
+						Color.RGBtoHSB(red, green, blue, hsbvals);
+					int rgbOut = Color.HSBtoRGB(((float) hue) / 360, hsbvals[1], hsbvals[2]);
+					return alpha | rgbOut;
+				}
+			};
+			ImageProducer prod = new FilteredImageSource(img.getSource(), filter);
+			Image filteredImage = Toolkit.getDefaultToolkit().createImage(prod);
+			BufferedImage outputImage = new BufferedImage(filteredImage.getWidth(null),
+					filteredImage.getHeight(null), BufferedImage.TYPE_INT_ARGB);
+			Graphics2D bGr = outputImage.createGraphics();
+			bGr.drawImage(filteredImage, 0, 0, null);
+			bGr.dispose();
+			
+			String newFileName = id + "_" + hue + "_" + fading + ".png";
+			File tempFile = new File(tempDir + "\\" + newFileName);
+			ImageIO.write(outputImage, "png", tempFile);
+			foundImages.put(newFileName, tempFile);
+		}	
+	}
 }
