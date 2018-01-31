@@ -199,6 +199,7 @@ public class Mcf2FoConverter {
 				else
 					rightCover = p;
 			}
+		// look for the background templates that contain hue and fading parameters
 			for (McfBackground bg : p.getBackgrounds()) {
 				if (bg.getTemplateName().matches("([a-zA-Z0-9_]+),hue=([0-9]+),fading=([0-9]+),normal(,.*)?")) {
 					resources.addMulticolorBackground(bg.getTemplateName(), tempImageDir);

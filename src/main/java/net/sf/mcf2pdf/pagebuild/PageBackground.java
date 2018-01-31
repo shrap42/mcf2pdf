@@ -24,9 +24,6 @@ public class PageBackground implements PageDrawable {
 
 	private List<? extends McfBackground> rightBg;
 
-	private int hue = 0;
-	private int fading = 0;
-
 	public PageBackground(List<? extends McfBackground> leftBg, List<? extends McfBackground> rightBg) {
 		this.leftBg = leftBg;
 		this.rightBg = rightBg;
@@ -107,11 +104,17 @@ public class PageBackground implements PageDrawable {
 	private File extractBackground(List<? extends McfBackground> bgs, PageRenderContext context) throws IOException {
 		for (McfBackground bg : bgs) {
 			String tn = bg.getTemplateName();
+
+			// enhanced pattern to cover the examples with hue and fading set
 			Pattern pattern = Pattern.compile("([a-zA-Z0-9_]+)(,hue=([0-9]+))?(,fading=([0-9]+))?,normal(,.*)?");
 			Matcher matcher = pattern.matcher(tn);
 			if (tn == null || !matcher.find())
 				continue;
 			boolean multicolorBg = false;
+			int hue = 0;
+			int fading = 0;
+			
+			// extract the parameters
 			if (matcher.groupCount() == 6) {
 				tn = matcher.group(1);
 				if (matcher.group(3) != null) {

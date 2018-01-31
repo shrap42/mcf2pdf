@@ -178,11 +178,16 @@ public class McfResourceScanner {
 	}
 
 	public void addMulticolorBackground(String templateName, File tempDir) throws IOException  {
+		
+		// typical templateName looks like: 357,hue=60,fading=2,normal ...
+		// files with names 357.webm etc are already loaded in foundImages
 		Pattern pattern = Pattern.compile("([a-zA-Z0-9_]+),hue=([0-9]+),fading=([0-9]+),normal(,.*)?");
 		Matcher matcher = pattern.matcher(templateName);
 		String id = "";
 		if (!matcher.find())
 			log.error("Error during parsing multicolor background. Template name: " + templateName);
+		
+		// extract the parameters
 		if (matcher.groupCount() == 4) {
 			id = matcher.group(1);
 			if (matcher.group(2) != null) {
@@ -194,8 +199,11 @@ public class McfResourceScanner {
 			log.debug("Multicolor background found. Parameters are: hue=" + hue + ", fading=" + fading);
 		}
 
+		// get the base file
 		File f = foundImages.get(id);
 		if (f != null) {
+			
+			// change the hue and add fading
 			BufferedImage img = ImageUtil.readImage(f);
 			ImageFilter filter = new RGBImageFilter() {
 				@Override
@@ -205,27 +213,38 @@ public class McfResourceScanner {
 					int green = (rgb & 0x00ff00) >> 8;
 					int blue = (rgb & 0x0000ff);
 					float[] hsbvals = new float[3];
+					
+					// convert from RGB to HSB and apply the fading if necessary
 					if (fading > 0)
 						Color.RGBtoHSB(red + (255 - red) / 4 * (fading + 1),
 								green + (255 - green) / 4 * (fading + 1), blue + (255 - blue) / 4 * (fading + 1),
 								hsbvals);
 					else
 						Color.RGBtoHSB(red, green, blue, hsbvals);
+					
+					// apply the hue
 					int rgbOut = Color.HSBtoRGB(((float) hue) / 360, hsbvals[1], hsbvals[2]);
 					return alpha | rgbOut;
 				}
 			};
+			
+			// apply the filter
 			ImageProducer prod = new FilteredImageSource(img.getSource(), filter);
 			Image filteredImage = Toolkit.getDefaultToolkit().createImage(prod);
+			
+			// render the image
 			BufferedImage outputImage = new BufferedImage(filteredImage.getWidth(null),
 					filteredImage.getHeight(null), BufferedImage.TYPE_INT_ARGB);
 			Graphics2D bGr = outputImage.createGraphics();
 			bGr.drawImage(filteredImage, 0, 0, null);
 			bGr.dispose();
 			
+			// write the image to file in the temp directory (same as pages are rendered to)
 			String newFileName = id + "_" + hue + "_" + fading + ".png";
 			File tempFile = new File(tempDir + "\\" + newFileName);
 			ImageIO.write(outputImage, "png", tempFile);
+			
+			// add the image to the list of found images (with the hue and fading parameters being part of the id)
 			foundImages.put(newFileName, tempFile);
 		}	
 	}
